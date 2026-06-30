@@ -1,0 +1,18 @@
+# Lifeline backend — CORE (no-key DEMO_MODE runs on just these; installs light).
+fastapi>=0.110
+uvicorn[standard]>=0.27
+curl_cffi>=0.7             # CT.gov CDN blocks httpx at the TLS-fingerprint level
+pydantic>=2.6
+numpy>=1.26
+scikit-learn>=1.4          # TF-IDF retrieval fallback (no torch needed)
+sse-starlette>=2.0         # Server-Sent Events for the live dashboard
+python-dotenv>=1.0
+
+# --- Optional live extras (install to light up Tier-1 paths) --------------
+# Claude eligibility reasoning:
+#   pip install anthropic
+# RunPod Flash GPU embed/rerank (the star path) — REQUIRED to go live; see DEPLOY.md:
+#   pip install runpod-flash   (then set RUNPOD_API_KEY + DEMO_MODE=false)
+# Local CPU embeddings / real prebuilt index (Tier-2, heavy ~2GB):
+#   pip install sentence-transformers torch faiss-cpu
+anthropic>=0.39           # optional but small; safe to keep in core

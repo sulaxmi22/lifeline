@@ -1,0 +1,65 @@
+{
+  "version": "1.0",
+  "python_version": "3.12",
+  "generated_at": "2026-06-30T19:04:36.405812Z",
+  "project_name": "Lifeline",
+  "resources": {
+    "lifeline-embed": {
+      "resource_type": "LiveServerless",
+      "file_path": "backend/flash_embed.py",
+      "local_path_prefix": "/backend/flash_embed",
+      "module_path": "backend.flash_embed",
+      "functions": [
+        {
+          "name": "embed_batch",
+          "module": "backend.flash_embed",
+          "is_async": true,
+          "is_class": false
+        }
+      ],
+      "is_load_balanced": false,
+      "is_live_resource": true,
+      "config_variable": null,
+      "makes_remote_calls": false,
+      "handler_file": "handler_lifeline-embed.py",
+      "target_python_version": "3.12",
+      "env": {
+        "_FLASH_SOURCE_FINGERPRINT": "a409103362293c1c15266a0e1a94978490cb19a0d00eef9ad9da2d5335811a01"
+      },
+      "endpoint_id": "5fucn5wwhv0e0d"
+    },
+    "lifeline-rerank": {
+      "resource_type": "LiveServerless",
+      "file_path": "backend/flash_rerank.py",
+      "local_path_prefix": "/backend/flash_rerank",
+      "module_path": "backend.flash_rerank",
+      "functions": [
+        {
+          "name": "rerank_batch",
+          "module": "backend.flash_rerank",
+          "is_async": true,
+          "is_class": false
+        }
+      ],
+      "is_load_balanced": false,
+      "is_live_resource": true,
+      "config_variable": null,
+      "makes_remote_calls": false,
+      "handler_file": "handler_lifeline-rerank.py",
+      "target_python_version": "3.12",
+      "env": {
+        "_FLASH_SOURCE_FINGERPRINT": "a409103362293c1c15266a0e1a94978490cb19a0d00eef9ad9da2d5335811a01"
+      },
+      "endpoint_id": "ownywjzmaay4yy"
+    }
+  },
+  "function_registry": {
+    "embed_batch": "lifeline-embed",
+    "rerank_batch": "lifeline-rerank"
+  },
+  "source_fingerprint": "a409103362293c1c15266a0e1a94978490cb19a0d00eef9ad9da2d5335811a01",
+  "resources_endpoints": {
+    "lifeline-embed": "https://api.runpod.ai/v2/5fucn5wwhv0e0d",
+    "lifeline-rerank": "https://api.runpod.ai/v2/ownywjzmaay4yy"
+  }
+}

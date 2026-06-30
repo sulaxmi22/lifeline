@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Patient surface: warm paper with a faint organic wash, never flat-clinical */
+.surface-paper {
+  background-color: #f4f1e9;
+  background-image:
+    radial-gradient(900px 500px at 12% -8%, rgba(127, 169, 155, 0.18), transparent 60%),
+    radial-gradient(800px 600px at 105% 8%, rgba(221, 126, 74, 0.1), transparent 55%);
+  min-height: 100vh;
+}
+
+/* Dashboard surface: deep slate with a subtle technical grid + vignette */
+.surface-dash {
+  background-color: #080c0e;
+  background-image:
+    radial-gradient(1100px 700px at 50% -10%, rgba(51, 230, 176, 0.08), transparent 60%),
+    linear-gradient(rgba(30, 48, 54, 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30, 48, 54, 0.35) 1px, transparent 1px);
+  background-size: 100% 100%, 44px 44px, 44px 44px;
+  min-height: 100vh;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Custom focus ring tuned to the pine palette */
+*:focus-visible {
+  outline: 2px solid #0e5e52;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Thin scrollbar for the dashboard */
+.surface-dash ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.surface-dash ::-webkit-scrollbar-thumb {
+  background: #1e3036;
+  border-radius: 4px;
+}
+
+@keyframes worker-rise {
+  from { height: 0%; }
+}
+
+.dash-glow {
+  box-shadow: 0 0 18px rgba(51, 230, 176, 0.35);
+}
