@@ -14,8 +14,6 @@
 
 ---
 
-## ⚡ The pitch
-
 **ClinicalTrials.gov already exists — but it's *search*, not *matching*.** Search "breast cancer" → **2,466 recruiting trials** (measured live), each wrapped in dense, doctor-facing inclusion/exclusion criteria averaging **~1,300 characters**. No scared family can read all of it and decide which few fit *their* situation. So **eligible patients never find trials — and trials fail from under-enrollment.** One gap, two casualties.
 
 **Lifeline closes it.** Given a patient profile, it:
@@ -93,7 +91,7 @@ flowchart TD
 
 ---
 
-## ✅ What Lifeline does — the matching funnel
+## ✅ What Lifeline does 
 
 The core engineering insight is a **funnel that puts the right compute at each stage** — cheap CPU where it suffices, GPU only for the embarrassingly-parallel heavy lift, the LLM only for the final, nuanced reasoning:
 
@@ -201,7 +199,7 @@ sequenceDiagram
 
 ---
 
-## 🚀 RunPod Flash — the four judge questions, answered
+## 🚀 RunPod Flash
 
 ```mermaid
 flowchart LR
@@ -219,7 +217,7 @@ flowchart LR
 
 ---
 
-## 🧠 Why GPUs *and* an LLM — the token math
+## 🧠 Why GPUs *and* an LLM 
 
 *"Couldn't Claude just do all of it?"* No — and the numbers show why:
 
