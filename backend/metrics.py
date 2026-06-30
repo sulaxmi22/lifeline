@@ -31,9 +31,12 @@ class ComputeTracker:
         self.peak_workers = 0
         self.gpu_seconds = 0.0
         self.batch_count = 0
-        self.trials_processed = 0
+        self.trials_processed = 0     # unique trials embedded (the honest count)
+        self.gpu_work_items = 0       # ALL vectors computed (embed+query+rerank)
+        self.count_trials = False     # only true during the corpus-embed stage
         self.trials_total = 0
         self.timeline: list[dict] = []
+        self.telemetry: dict = {}     # live infra facts for the dashboard
 
         self._t0 = time.perf_counter()
         self._gpu_stage_seconds = 0.0  # wall-clock spent in GPU stages
@@ -62,7 +65,12 @@ class ComputeTracker:
             dur = time.perf_counter() - start
             self.gpu_seconds += dur
             self._gpu_stage_seconds = max(self._gpu_stage_seconds, self.elapsed())
-            self.trials_processed += n_items
+            self.gpu_work_items += n_items
+            # Only the corpus-embed stage advances the *unique trial* counter,
+            # so the tile never reads "processed > available" (query + rerank
+            # re-touch the same trials and would otherwise double-count).
+            if self.count_trials:
+                self.trials_processed += n_items
             self.in_flight -= 1
 
     def add_tick(self, workers: int | None = None) -> dict:
@@ -109,6 +117,7 @@ class ComputeTracker:
             mode=self.mode,
             trials_total_available=self.trials_total,
             trials_processed=self.trials_processed,
+            gpu_work_items=self.gpu_work_items,
             batch_count=self.batch_count,
             peak_workers=self.peak_workers,
             gpu_seconds_est=round(self.gpu_seconds, 3),
@@ -116,4 +125,5 @@ class ComputeTracker:
             elapsed_s=round(self.elapsed(), 2),
             timeline=self.timeline,
             efficiency=eff,
+            telemetry=self.telemetry,
         )

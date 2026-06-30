@@ -33,6 +33,8 @@ const config: Config = {
         "d-dim": "#6A817B",
         "d-gpu": "#33E6B0",
         "d-cpu": "#5CB4E8",
+        "d-runpod": "#9A86FF",
+        "d-bright": "#22D3EE",
         "d-amber": "#F4B53F",
         "d-claude": "#C99BF0",
       },

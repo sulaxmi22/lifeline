@@ -51,12 +51,19 @@ export interface Eligibility {
   plain_language_summary: string;
 }
 
+export interface SerpItem {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
 export interface MatchedTrial {
   trial: Trial;
   retrieval_score: number;
   rerank_score: number;
   nearest_location: TrialLocation | null;
   eligibility: Eligibility;
+  enrichment?: { provider: string; items: SerpItem[] } | null;
 }
 
 export interface EfficiencyComparison {
@@ -67,10 +74,38 @@ export interface EfficiencyComparison {
   cheaper_factor: number;
 }
 
+export interface DataSource {
+  name: string;
+  via: string;
+  items: number;
+  ok: boolean;
+}
+
+export interface Telemetry {
+  provider?: string;
+  endpoint_host?: string;
+  gpu?: string;
+  embed_endpoint?: string;
+  rerank_endpoint?: string;
+  embed_endpoint_id?: string;
+  rerank_endpoint_id?: string;
+  embed_model?: string;
+  rerank_model?: string;
+  reason_engine?: string;
+  batch_size?: number;
+  vector_dim?: number | null;
+  ingest_source?: string;
+  ingest_total?: number;
+  ingest_fetched?: number;
+  data_sources?: DataSource[];
+  enrichment?: { provider: string; via: string; enriched: number; ok: boolean } | null;
+}
+
 export interface ComputeMetrics {
   mode: "flash_live" | "local_cpu" | "demo_simulated";
   trials_total_available: number;
   trials_processed: number;
+  gpu_work_items: number;
   batch_count: number;
   peak_workers: number;
   gpu_seconds_est: number;
@@ -78,6 +113,13 @@ export interface ComputeMetrics {
   elapsed_s: number;
   timeline: { t: number; workers: number }[];
   efficiency: EfficiencyComparison;
+  telemetry: Telemetry;
+}
+
+export interface LogEvent {
+  t: number;
+  level: "info" | "warn" | "error";
+  msg: string;
 }
 
 export interface DonePayload {
@@ -98,6 +140,8 @@ export interface TickEvent {
   workers: number;
   peak_workers: number;
   trials_processed: number;
+  gpu_work_items: number;
+  gpu_calls: number;
   gpu_seconds_est: number;
   cost_est: number;
   elapsed: number;

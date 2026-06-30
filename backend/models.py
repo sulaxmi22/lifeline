@@ -101,6 +101,7 @@ class MatchedTrial(BaseModel):
     rerank_score: float = 0.0
     nearest_location: Optional[TrialLocation] = None
     eligibility: Eligibility = Field(default_factory=Eligibility)
+    enrichment: Optional[dict] = None  # Bright Data SERP context (optional)
 
 
 class EfficiencyComparison(BaseModel):
@@ -116,7 +117,8 @@ class ComputeMetrics(BaseModel):
 
     mode: str = "demo_simulated"  # flash_live | local_cpu | demo_simulated
     trials_total_available: int = 0  # real totalCount from CT.gov
-    trials_processed: int = 0  # real count embedded this run
+    trials_processed: int = 0  # unique trials embedded this run
+    gpu_work_items: int = 0  # ALL vectors computed (embed + query + rerank)
     batch_count: int = 0
     peak_workers: int = 0
     gpu_seconds_est: float = 0.0
@@ -124,6 +126,7 @@ class ComputeMetrics(BaseModel):
     elapsed_s: float = 0.0
     timeline: list[dict] = Field(default_factory=list)  # [{t, workers}]
     efficiency: EfficiencyComparison = Field(default_factory=EfficiencyComparison)
+    telemetry: dict = Field(default_factory=dict)  # live infra facts for dashboard
 
 
 class MatchResponse(BaseModel):

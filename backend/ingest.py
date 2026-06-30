@@ -202,15 +202,33 @@ async def get_trials(
     """
     settings = get_settings()
 
+    # Tier 0: Bright Data Web Unlocker (sponsor path) — additive, falls through.
+    if settings.use_brightdata_fetch:
+        try:
+            from . import brightdata  # lazy import avoids a circular dependency
+
+            trials, total = await brightdata.fetch_ctgov(condition, location)
+            if trials:
+                if not location:  # never let a location-filtered fetch clobber the broad cache
+                    try:
+                        write_cache(condition, trials, total)
+                    except Exception:
+                        pass
+                return trials, total, "brightdata"
+        except Exception as exc:  # noqa: BLE001 - degrade to direct live
+            print(f"[ingest] Bright Data fetch failed ({exc!r}); falling back to direct live")
+
     if settings.use_live_ingest:
         try:
             trials, total = await fetch_live(condition, location)
             if trials:
-                # Refresh the cache opportunistically for resilience.
-                try:
-                    write_cache(condition, trials, total)
-                except Exception:
-                    pass
+                # Refresh the cache opportunistically — but only for broad (no-location)
+                # queries, so a location-filtered fetch can't clobber the seed corpus.
+                if not location:
+                    try:
+                        write_cache(condition, trials, total)
+                    except Exception:
+                        pass
                 return trials, total, "live"
         except Exception as exc:  # noqa: BLE001 - degrade gracefully
             print(f"[ingest] live fetch failed ({exc!r}); falling back to cache")

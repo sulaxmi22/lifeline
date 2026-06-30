@@ -83,6 +83,34 @@ export default function TrialCard({
               </ul>
             </div>
           )}
+
+          {match.enrichment?.items?.length ? (
+            <div className="mt-5 rounded-2xl border border-line bg-paper/60 p-4">
+              <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+                Recent context
+                <span className="rounded bg-sage/20 px-1.5 py-0.5 text-[10px] font-medium normal-case text-pine-deep">
+                  via Bright Data
+                </span>
+              </p>
+              <ul className="mt-2 space-y-2">
+                {match.enrichment.items.map((it, i) => (
+                  <li key={i} className="text-[13px] leading-snug">
+                    <a
+                      href={it.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-pine underline-offset-2 hover:underline"
+                    >
+                      {it.title}
+                    </a>
+                    {it.snippet && (
+                      <p className="mt-0.5 line-clamp-2 text-ink-soft">{it.snippet}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         {/* Right: verdict + next steps */}

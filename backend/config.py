@@ -35,6 +35,16 @@ class Settings:
         self.anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "").strip()
         self.flash_app: str = os.getenv("FLASH_APP", "lifeline")
         self.flash_env: str = os.getenv("FLASH_ENV", "production")
+        # Deployed RunPod endpoint IDs (shown on the dashboard; override per redeploy).
+        self.flash_embed_endpoint: str = os.getenv("FLASH_EMBED_ENDPOINT", "5fucn5wwhv0e0d")
+        self.flash_rerank_endpoint: str = os.getenv("FLASH_RERANK_ENDPOINT", "ownywjzmaay4yy")
+        self.flash_gpu: str = os.getenv("FLASH_GPU", "NVIDIA RTX 4090")
+
+        # Bright Data (web extraction). Fetch layer needs a Web Unlocker zone;
+        # everything degrades gracefully to curl_cffi / no-enrichment if unset.
+        self.brightdata_api_key: str = os.getenv("BRIGHTDATA_API_KEY", "").strip()
+        self.brightdata_zone: str = os.getenv("BRIGHTDATA_ZONE", "web_unlocker1").strip()
+        self.brightdata_serp_zone: str = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1").strip()
         self.gpu_cost_per_second: float = float(
             os.getenv("GPU_COST_PER_SECOND", "0.00012")
         )
@@ -78,6 +88,16 @@ class Settings:
     def use_live_ingest(self) -> bool:
         """True when we should hit the live ClinicalTrials.gov API."""
         return not self.demo_mode
+
+    @property
+    def use_brightdata_fetch(self) -> bool:
+        """Route live CT.gov fetch through Bright Data Web Unlocker."""
+        return bool(self.brightdata_api_key and self.brightdata_zone) and not self.demo_mode
+
+    @property
+    def use_brightdata_enrich(self) -> bool:
+        """Enrich top results with Bright Data (SERP). Non-blocking, optional."""
+        return bool(self.brightdata_api_key and self.brightdata_serp_zone)
 
     def describe(self) -> dict:
         return {

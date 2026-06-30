@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import EfficiencyPanel from "@/components/dashboard/EfficiencyPanel";
+import InfraPanel from "@/components/dashboard/InfraPanel";
+import LiveLog from "@/components/dashboard/LiveLog";
 import MetricTiles from "@/components/dashboard/MetricTiles";
 import PipelineBar from "@/components/dashboard/PipelineBar";
 import WorkerGrid from "@/components/dashboard/WorkerGrid";
@@ -12,7 +14,9 @@ import { fetchConfig, streamUrl } from "@/lib/api";
 import type {
   DonePayload,
   EfficiencyComparison,
+  LogEvent,
   StageEvent,
+  Telemetry,
   TickEvent,
 } from "@/lib/types";
 
@@ -21,6 +25,8 @@ interface Live {
   peak: number;
   trialsProcessed: number;
   trialsTotal: number;
+  vectors: number;
+  gpuCalls: number;
   gpuSeconds: number;
   cost: number;
   elapsed: number;
@@ -31,6 +37,8 @@ const ZERO: Live = {
   peak: 0,
   trialsProcessed: 0,
   trialsTotal: 0,
+  vectors: 0,
+  gpuCalls: 0,
   gpuSeconds: 0,
   cost: 0,
   elapsed: 0,
@@ -46,6 +54,8 @@ function Processing() {
   const [detail, setDetail] = useState("Connecting to the matching engine…");
   const [ticks, setTicks] = useState<{ t: number; workers: number }[]>([]);
   const [live, setLive] = useState<Live>(ZERO);
+  const [logs, setLogs] = useState<LogEvent[]>([]);
+  const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [efficiency, setEfficiency] = useState<EfficiencyComparison | null>(null);
   const [mode, setMode] = useState<DonePayload["compute_metrics"]["mode"] | null>(null);
   const [maxWorkers, setMaxWorkers] = useState(8);
@@ -76,6 +86,8 @@ function Processing() {
           setStages(s.stages);
           setTicks(s.ticks);
           setLive(s.live);
+          setLogs(s.logs || []);
+          setTelemetry(s.telemetry || null);
           setEfficiency(s.efficiency);
           setMode(s.mode);
           setMaxWorkers(s.maxWorkers);
@@ -110,10 +122,17 @@ function Processing() {
         workers: d.workers,
         peak: Math.max(prev.peak, d.peak_workers),
         trialsProcessed: Math.max(prev.trialsProcessed, d.trials_processed),
+        vectors: Math.max(prev.vectors, d.gpu_work_items ?? 0),
+        gpuCalls: Math.max(prev.gpuCalls, d.gpu_calls ?? 0),
         gpuSeconds: d.gpu_seconds_est,
         cost: d.cost_est,
         elapsed: d.elapsed,
       }));
+    });
+
+    es.addEventListener("log", (e) => {
+      const d: LogEvent = JSON.parse((e as MessageEvent).data);
+      setLogs((prev) => [...prev, d]);
     });
 
     es.addEventListener("done", (e) => {
@@ -133,31 +152,39 @@ function Processing() {
         peak: cm.peak_workers,
         trialsProcessed: cm.trials_processed,
         trialsTotal: cm.trials_total_available,
+        vectors: cm.gpu_work_items,
+        gpuCalls: cm.batch_count,
         gpuSeconds: cm.gpu_seconds_est,
         cost: cm.cost_est,
         elapsed: cm.elapsed_s,
       };
       setMode(cm.mode);
       setEfficiency(cm.efficiency);
+      setTelemetry(cm.telemetry);
       setStages(finalStages);
       setLive(finalLive);
       setResultsCount(d.results.length);
-      setTicks((t) => {
-        const finalTicks = [...t, { t: cm.elapsed_s, workers: 0 }];
-        // Snapshot the whole dashboard so it can be revisited (?view=last).
-        sessionStorage.setItem(
-          "lifeline:dashboard",
-          JSON.stringify({
-            stages: finalStages,
-            ticks: finalTicks,
-            live: finalLive,
-            efficiency: cm.efficiency,
-            mode: cm.mode,
-            maxWorkers: maxWorkersRef.current,
-            resultsCount: d.results.length,
-          })
-        );
-        return finalTicks;
+      setLogs((prevLogs) => {
+        setTicks((t) => {
+          const finalTicks = [...t, { t: cm.elapsed_s, workers: 0 }];
+          // Snapshot the whole dashboard so it can be revisited (?view=last).
+          sessionStorage.setItem(
+            "lifeline:dashboard",
+            JSON.stringify({
+              stages: finalStages,
+              ticks: finalTicks,
+              live: finalLive,
+              logs: prevLogs,
+              telemetry: cm.telemetry,
+              efficiency: cm.efficiency,
+              mode: cm.mode,
+              maxWorkers: maxWorkersRef.current,
+              resultsCount: d.results.length,
+            })
+          );
+          return finalTicks;
+        });
+        return prevLogs;
       });
       setFinished(true);
       es.close();
@@ -273,6 +300,8 @@ function Processing() {
                 : detail}
             </div>
 
+            <InfraPanel telemetry={telemetry} isLive={isLive} gpuCalls={live.gpuCalls} />
+
             <div className="grid gap-4 lg:grid-cols-2">
               <WorkerGrid
                 workers={live.workers}
@@ -288,7 +317,11 @@ function Processing() {
               peakWorkers={live.peak}
               gpuSeconds={live.gpuSeconds}
               cost={live.cost}
+              vectors={live.vectors}
+              gpuCalls={live.gpuCalls}
             />
+
+            <LiveLog logs={logs} />
 
             <EfficiencyPanel liveCost={live.cost} efficiency={efficiency} />
           </div>

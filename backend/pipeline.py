@@ -48,6 +48,8 @@ def _tick_payload(tracker: ComputeTracker, tick: dict) -> dict:
         "workers": tick["workers"],
         "peak_workers": tracker.peak_workers,
         "trials_processed": tracker.trials_processed,
+        "gpu_work_items": tracker.gpu_work_items,
+        "gpu_calls": tracker.batch_count,
         "gpu_seconds_est": round(tracker.gpu_seconds, 2),
         "cost_est": round(tracker.gpu_seconds * tracker.gpu_cost_per_second, 6),
         "elapsed": round(tracker.elapsed(), 2),
@@ -111,13 +113,55 @@ async def run(profile: PatientProfile, emit: Emit) -> None:
     tracker = ComputeTracker(settings)
     tracker.reset_clock()
 
+    async def log(msg: str, level: str = "info") -> None:
+        """Stream a timestamped line to the dashboard's live activity feed."""
+        await emit("log", {"t": round(tracker.elapsed(), 2), "level": level, "msg": msg})
+
+    # Seed infra telemetry (what/where/how) shown live on the dashboard.
+    reason_engine = (
+        f"Claude · {settings.claude_model}" if settings.use_claude else "Local rule engine"
+    )
+    tracker.telemetry = {
+        "provider": "RunPod Serverless",
+        "endpoint_host": "api.runpod.ai",
+        "gpu": settings.flash_gpu,
+        "embed_endpoint": "lifeline-embed",
+        "rerank_endpoint": "lifeline-rerank",
+        "embed_endpoint_id": settings.flash_embed_endpoint,
+        "rerank_endpoint_id": settings.flash_rerank_endpoint,
+        "embed_model": settings.embed_model,
+        "rerank_model": settings.rerank_model,
+        "reason_engine": reason_engine,
+        "batch_size": settings.embed_batch_size,
+        "vector_dim": None,
+        "ingest_source": None,
+        "ingest_total": 0,
+        "ingest_fetched": 0,
+        "data_sources": [],
+    }
+    await log(f"Lifeline pipeline started · condition='{profile.condition}'"
+              + (f", location='{profile.location}'" if profile.location else ""))
+
     # 1) INGEST -----------------------------------------------------------
     await emit("stage", {"stage": "ingest", "status": "active", "detail": "Searching ClinicalTrials.gov…"})
+    await log("→ Querying ClinicalTrials.gov v2 REST API (filter: RECRUITING)")
     trials, total, source = await get_trials(profile.condition, profile.location)
     tracker.trials_total = total
+    src_label = {
+        "live": "live ClinicalTrials.gov",
+        "brightdata": "Bright Data → ClinicalTrials.gov",
+        "cache": "cached snapshot",
+    }.get(source, source)
+    tracker.telemetry.update(
+        ingest_source=source, ingest_total=total, ingest_fetched=len(trials)
+    )
+    tracker.telemetry["data_sources"] = [
+        {"name": "ClinicalTrials.gov v2", "via": src_label, "items": len(trials), "ok": bool(trials)}
+    ]
+    await log(f"✓ {total:,} recruiting trials via {src_label} → ingested {len(trials):,}")
     await emit("stage", {
         "stage": "ingest", "status": "complete",
-        "detail": f"{total:,} recruiting trials found ({source})",
+        "detail": f"{total:,} recruiting trials found ({src_label})",
     })
     if not trials:
         await emit("error", {"message": f"No recruiting trials found for '{profile.condition}'."})
@@ -129,10 +173,18 @@ async def run(profile: PatientProfile, emit: Emit) -> None:
     # 2) EMBED (GPU burst) ------------------------------------------------
     await emit("stage", {"stage": "embed", "status": "active", "detail": f"Embedding {len(trials):,} trials on GPU…"})
     intend_flash = settings.use_flash and flash_embed.FLASH_AVAILABLE
+    n_batches = max(1, math.ceil(len(trials) / settings.embed_batch_size))
+    await log(
+        f"→ Embedding {len(trials):,} trials · {settings.embed_model} · {n_batches} batch"
+        f"{'es' if n_batches != 1 else ''} → "
+        + (f"RunPod {settings.flash_gpu} (lifeline-embed)" if intend_flash else "local fallback")
+    )
     sampler = None
     if intend_flash:
         sampler = asyncio.create_task(_live_sampler(tracker, emit))
+    tracker.count_trials = True              # count unique trials only here
     corpus_emb, emb_mode = await embed_texts(corpus_texts, tracker)
+    tracker.count_trials = False
     query_emb = None
     if corpus_emb is not None:
         q, _ = await embed_texts([query_text], tracker, is_query=True)
@@ -140,26 +192,46 @@ async def run(profile: PatientProfile, emit: Emit) -> None:
     if sampler:
         sampler.cancel()
 
+    dim = int(corpus_emb.shape[1]) if corpus_emb is not None else None
+    tracker.telemetry["vector_dim"] = dim
+
     # Resolve the honest dashboard mode and animate accordingly.
     if emb_mode == "flash_live":
         tracker.mode = "flash_live"
+        await log(
+            f"✓ Embedded on RunPod · {tracker.batch_count} GPU call"
+            f"{'s' if tracker.batch_count != 1 else ''} · peak {tracker.peak_workers} worker"
+            f"{'s' if tracker.peak_workers != 1 else ''} · {dim}-dim vectors"
+        )
     else:
         tracker.mode = "local_cpu" if emb_mode == "local_cpu" else "demo_simulated"
+        await log(
+            f"⚠ Flash unavailable → {tracker.mode} path; showing representative burst",
+            level="warn",
+        )
         await _simulate_burst(tracker, emit, len(trials))
+        tracker.gpu_work_items = max(tracker.gpu_work_items, len(trials))
     await emit("stage", {"stage": "embed", "status": "complete", "detail": f"Embedded {len(trials):,} trials"})
 
     # 3) RETRIEVE (FAISS / TF-IDF) ---------------------------------------
     # hits is ordered best-first: [(orig_trial_index, retrieval_score), ...]
     if corpus_emb is not None and query_emb is not None:
         hits = vector_search(corpus_emb, query_emb, settings.retrieve_top_k)
+        search_kind = f"FAISS cosine over {len(trials):,} × {dim}-dim vectors"
     else:
         hits = tfidf_search(corpus_texts, query_text, settings.retrieve_top_k)
+        search_kind = f"TF-IDF cosine over {len(trials):,} trials"
     cand_orig_idx = [i for i, _ in hits]
     cand_retrieval = [s for _, s in hits]
     candidates = [trials[i] for i in cand_orig_idx]
+    await log(f"✓ Retrieval: {search_kind} → top {len(candidates)} candidates")
 
     # 4) RERANK (GPU) -----------------------------------------------------
     await emit("stage", {"stage": "rerank", "status": "active", "detail": f"Reranking top {len(candidates)} trials…"})
+    await log(
+        f"→ Reranking {len(candidates)} candidates · {settings.rerank_model} → "
+        + (f"RunPod (lifeline-rerank)" if intend_flash else "local fallback")
+    )
     cand_texts = [c.embed_text()[:1200] for c in candidates]
     scores, _ = await rerank(query_text, cand_texts, tracker)
     if scores is None:
@@ -171,11 +243,14 @@ async def run(profile: PatientProfile, emit: Emit) -> None:
         rank_scores = scores
     top_positions = order[: settings.rerank_top_k]
     top_trials = [candidates[p] for p in top_positions]
+    await log(f"✓ Reranked → selected top {len(top_trials)} trials")
     await emit("stage", {"stage": "rerank", "status": "complete", "detail": f"Selected top {len(top_trials)}"})
 
     # 5) REASON (Claude / local) -----------------------------------------
     await emit("stage", {"stage": "reason", "status": "active", "detail": f"Reasoning over {len(top_trials)} trials…"})
+    await log(f"→ Eligibility reasoning over {len(top_trials)} trials · {reason_engine}")
     eligs = await reason_batch(profile, top_trials)
+    await log("✓ Eligibility verdicts ready")
     await emit("stage", {"stage": "reason", "status": "complete", "detail": "Eligibility verdicts ready"})
 
     # Assemble + sort (verdict, then confidence) --------------------------
@@ -190,7 +265,43 @@ async def run(profile: PatientProfile, emit: Emit) -> None:
         ))
     matched.sort(key=lambda m: (_VERDICT_RANK.get(m.eligibility.verdict, 1), -m.eligibility.confidence))
 
+    # 6) ENRICH (Bright Data SERP) — optional, non-blocking, fallback-safe -----
+    if settings.use_brightdata_enrich and matched:
+        try:
+            from . import brightdata
+
+            await log("→ Enriching top trials with web context via Bright Data SERP…")
+            top = matched[:3]
+
+            async def _enrich(m):
+                q = f"{m.trial.nctId} {m.trial.briefTitle} clinical trial"
+                return await brightdata.serp_context(q, n=2)
+
+            results = await asyncio.wait_for(
+                asyncio.gather(*(_enrich(m) for m in top), return_exceptions=True),
+                timeout=20.0,
+            )
+            enriched = 0
+            for m, res in zip(top, results):
+                if isinstance(res, list) and res:
+                    m.enrichment = {"provider": "Bright Data SERP", "items": res}
+                    enriched += 1
+            tracker.telemetry["enrichment"] = {
+                "provider": "Bright Data SERP", "via": "Google", "enriched": enriched, "ok": enriched > 0,
+            }
+            if enriched:
+                tracker.telemetry.setdefault("data_sources", []).append(
+                    {"name": "Bright Data SERP", "via": "web search", "items": enriched, "ok": True}
+                )
+            await log(f"✓ Enriched {enriched} trial(s) with Bright Data web context")
+        except Exception as exc:  # noqa: BLE001
+            await log(f"⚠ Bright Data enrichment skipped ({exc})", level="warn")
+
     metrics = tracker.build()
+    await log(
+        f"✓ Done in {metrics.elapsed_s:.1f}s · {metrics.batch_count} GPU calls · "
+        f"{metrics.gpu_work_items:,} vectors · est ${metrics.cost_est:.4f}"
+    )
     await emit("done", {
         "results": [m.model_dump() for m in matched],
         "compute_metrics": metrics.model_dump(),

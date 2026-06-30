@@ -39,20 +39,36 @@ export default function MetricTiles({
   peakWorkers,
   gpuSeconds,
   cost,
+  vectors,
+  gpuCalls,
 }: {
   trialsProcessed: number;
   trialsTotal: number;
   peakWorkers: number;
   gpuSeconds: number;
   cost: number;
+  vectors: number;
+  gpuCalls: number;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       <Tile
         label="Trials processed"
         value={trialsProcessed.toLocaleString()}
         sub={trialsTotal ? `of ${trialsTotal.toLocaleString()} available` : "real count"}
         accent="text-d-gpu"
+      />
+      <Tile
+        label="Vectors computed"
+        value={vectors.toLocaleString()}
+        sub="embed + query + rerank"
+        accent="text-d-gpu"
+      />
+      <Tile
+        label="GPU calls"
+        value={gpuCalls.toLocaleString()}
+        sub="endpoint invocations"
+        accent="text-d-runpod"
       />
       <Tile label="Peak GPU workers" value={peakWorkers.toString()} sub="parallel" />
       <Tile
